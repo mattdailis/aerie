@@ -17,52 +17,56 @@ class DatabaseTests {
   @BeforeAll
   void beforeAll() throws SQLException, IOException, InterruptedException {
 
-    // Create test database and grand privileges
-    ProcessBuilder pb = new ProcessBuilder("psql",
-                                           "postgresql://postgres:postgres@localhost:5432",
-                                           "-v", "ON_ERROR_STOP=1",
-                                           "-c", "CREATE DATABASE aerie_merlin_test;",
-                                           "-c", "GRANT ALL PRIVILEGES ON DATABASE aerie_merlin_test TO aerie;"
-    );
+    {
+      // Create test database and grant privileges
+      final var pb = new ProcessBuilder("psql",
+                                                   "postgresql://postgres:postgres@localhost:5432",
+                                                   "-v", "ON_ERROR_STOP=1",
+                                                   "-c", "CREATE DATABASE aerie_merlin_test;",
+                                                   "-c", "GRANT ALL PRIVILEGES ON DATABASE aerie_merlin_test TO aerie;"
+      );
 
-    Process proc = pb.start();
+      final var proc = pb.start();
 
-    // Handle the case where we cannot connect to postgres by skipping the tests
-    final String errors = new String(proc.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
-    Assume.assumeFalse(errors.contains("could not connect to server: Connection refused"));
-    proc.waitFor();
-    proc.destroy();
+      // Handle the case where we cannot connect to postgres by skipping the tests
+      final var errors = new String(proc.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
+      Assume.assumeFalse(errors.contains("could not connect to server: Connection refused"));
+      proc.waitFor();
+      proc.destroy();
+    }
 
-    // Grant table privileges to aerie user for the tests
-    // Apparently, the previous privileges are insufficient on their own
-    pb = new ProcessBuilder("psql",
-                            "postgresql://postgres:postgres@localhost:5432/aerie_merlin_test",
-                            "-v", "ON_ERROR_STOP=1",
-                            "-c", "ALTER DEFAULT PRIVILEGES GRANT ALL ON TABLES TO aerie;",
-                            "-c", "\\ir %s".formatted(initSqlScriptFile.getAbsolutePath())
-    );
+    {
+      // Grant table privileges to aerie user for the tests
+      // Apparently, the previous privileges are insufficient on their own
+      final var pb = new ProcessBuilder("psql",
+                              "postgresql://postgres:postgres@localhost:5432/aerie_merlin_test",
+                              "-v", "ON_ERROR_STOP=1",
+                              "-c", "ALTER DEFAULT PRIVILEGES GRANT ALL ON TABLES TO aerie;",
+                              "-c", "\\ir %s".formatted(initSqlScriptFile.getAbsolutePath())
+      );
 
-    pb.redirectError(ProcessBuilder.Redirect.INHERIT);
-    proc = pb.start();
-    proc.waitFor();
-    proc.destroy();
+      pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+      final var proc = pb.start();
+      proc.waitFor();
+      proc.destroy();
+    }
 
 
-    final PGDataSource pgDataSource = new PGDataSource();
+    final var pgDataSource = new PGDataSource();
 
     pgDataSource.setServerName("localhost");
     pgDataSource.setPortNumber(5432);
     pgDataSource.setDatabaseName("aerie_merlin_test");
     pgDataSource.setApplicationName("Merlin Database Tests");
 
-    final HikariConfig hikariConfig = new HikariConfig();
+    final var hikariConfig = new HikariConfig();
     hikariConfig.setUsername("aerie");
     hikariConfig.setPassword("aerie");
     hikariConfig.setDataSource(pgDataSource);
 
-    final HikariDataSource hikariDataSource = new HikariDataSource(hikariConfig);
+    final var hikariDataSource = new HikariDataSource(hikariConfig);
 
-    connection = hikariDataSource.getConnection();
+    this.connection = hikariDataSource.getConnection();
   }
 
   @AfterAll
