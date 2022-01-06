@@ -14,6 +14,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -102,130 +103,152 @@ class DatabaseTests {
   }
 
   int insertFileUpload() throws SQLException {
-    final var res = connection.createStatement()
-                              .executeQuery(
-                                  """
-                                      INSERT INTO uploaded_file (path, name)
-                                      VALUES ('test-path', 'test-name-%s')
-                                      RETURNING id;"""
-                                      .formatted(UUID.randomUUID().toString())
-                              );
-    res.next();
-    return res.getInt("id");
+    try (final var statement = connection.createStatement()) {
+      final var res = statement.executeQuery(
+          """
+              INSERT INTO uploaded_file (path, name)
+              VALUES ('test-path', 'test-name-%s')
+              RETURNING id;"""
+              .formatted(UUID.randomUUID().toString())
+      );
+      res.next();
+      return res.getInt("id");
+    }
   }
 
   void clearFileUploads() throws SQLException {
-    connection.createStatement()
-              .executeUpdate(
-                  """
-                      TRUNCATE uploaded_file CASCADE;"""
-              );
+    try(final var statement = connection.createStatement()) {
+      statement.executeUpdate(
+          """
+              TRUNCATE uploaded_file CASCADE;"""
+      );
+    }
   }
 
   int insertMissionModel(int fileId) throws SQLException {
-    final var res = connection.createStatement()
-                              .executeQuery(
-                                  """
-                                      INSERT INTO mission_model (name, mission, owner, version, jar_id)
-                                      VALUES ('test-mission-model-%s', 'test-mission', 'tester', '0', %s)
-                                      RETURNING id;"""
-                                      .formatted(UUID.randomUUID().toString(), fileId)
-                              );
-    res.next();
-    return res.getInt("id");
+    try(final var statement = connection.createStatement()) {
+      final var res = statement
+          .executeQuery(
+              """
+                  INSERT INTO mission_model (name, mission, owner, version, jar_id)
+                  VALUES ('test-mission-model-%s', 'test-mission', 'tester', '0', %s)
+                  RETURNING id;"""
+                  .formatted(UUID.randomUUID().toString(), fileId)
+          );
+      res.next();
+      return res.getInt("id");
+    }
   }
 
   void clearMissionModels() throws SQLException {
-    connection.createStatement()
-              .executeUpdate(
-                  """
-                      TRUNCATE mission_model CASCADE;"""
-              );
+    try(final var statement = connection.createStatement()) {
+      statement
+          .executeUpdate(
+              """
+                  TRUNCATE mission_model CASCADE;"""
+          );
+    }
   }
 
   int insertPlan(int missionModelId) throws SQLException {
-    final var res = connection.createStatement()
-                              .executeQuery(
-                                  """
-                                      INSERT INTO plan (name, model_id, duration, start_time)
-                                      VALUES ('test-plan-%s', '%s', '0', '2020-1-1 00:00:00')
-                                      RETURNING id;"""
-                                      .formatted(UUID.randomUUID().toString(), missionModelId)
-                              );
-    res.next();
-    return res.getInt("id");
+    try(final var statement = connection.createStatement()) {
+      final var res = statement
+          .executeQuery(
+              """
+                  INSERT INTO plan (name, model_id, duration, start_time)
+                  VALUES ('test-plan-%s', '%s', '0', '2020-1-1 00:00:00')
+                  RETURNING id;"""
+                  .formatted(UUID.randomUUID().toString(), missionModelId)
+          );
+      res.next();
+      return res.getInt("id");
+    }
   }
 
   void clearPlans() throws SQLException {
-    connection.createStatement()
-              .executeUpdate(
-                  """
-                      TRUNCATE plan CASCADE;"""
-              );
+    try(final var statement = connection.createStatement()) {
+      statement
+          .executeUpdate(
+              """
+                  TRUNCATE plan CASCADE;"""
+          );
+    }
   }
 
   int insertActivity(int planId) throws SQLException {
-    final var res = connection.createStatement()
-                              .executeQuery(
-                                  """
-                                      INSERT INTO activity (type, plan_id, start_offset, arguments)
-                                      VALUES ('test-activity', '%s', '00:00:00', '{}')
-                                      RETURNING id;"""
-                                      .formatted(planId)
-                              );
+    try(final var statement = connection.createStatement()) {
+      final var res = statement
+          .executeQuery(
+              """
+                  INSERT INTO activity (type, plan_id, start_offset, arguments)
+                  VALUES ('test-activity', '%s', '00:00:00', '{}')
+                  RETURNING id;"""
+                  .formatted(planId)
+          );
 
-    res.next();
-    return res.getInt("id");
+      res.next();
+      return res.getInt("id");
+    }
   }
 
   void clearActivities() throws SQLException {
-    connection.createStatement()
-              .executeUpdate(
-                  """
-                      TRUNCATE activity CASCADE;"""
-              );
+    try(final var statement = connection.createStatement()) {
+      statement
+          .executeUpdate(
+              """
+                  TRUNCATE activity CASCADE;"""
+          );
+    }
   }
 
   int insertSimulationTemplate(int modelId) throws SQLException {
-    final var res = connection.createStatement()
-                              .executeQuery(
-                                  """
-                                      INSERT INTO simulation_template (model_id, description, arguments)
-                                      VALUES ('%s', 'test-description', '{}')
-                                      RETURNING id;"""
-                                      .formatted(modelId)
-                              );
-    res.next();
-    return res.getInt("id");
+    try(final var statement = connection.createStatement()) {
+      final var res = statement
+          .executeQuery(
+              """
+                  INSERT INTO simulation_template (model_id, description, arguments)
+                  VALUES ('%s', 'test-description', '{}')
+                  RETURNING id;"""
+                  .formatted(modelId)
+          );
+      res.next();
+      return res.getInt("id");
+    }
   }
 
   void clearSimulationTemplates() throws SQLException {
-    connection.createStatement()
-              .executeUpdate(
-                  """
-                      TRUNCATE simulation_template CASCADE;"""
-              );
+    try(final var statement = connection.createStatement()) {
+      statement
+          .executeUpdate(
+              """
+                  TRUNCATE simulation_template CASCADE;"""
+          );
+    }
   }
 
   int insertSimulation(int simulationTemplateId, int planId) throws SQLException {
-    final var res = connection.createStatement()
-                              .executeQuery(
-                                  """
-                                      INSERT INTO simulation (simulation_template_id, plan_id, arguments)
-                                      VALUES ('%s', '%s', '{}')
-                                      RETURNING id;"""
-                                      .formatted(simulationTemplateId, planId)
-                              );
-    res.next();
-    return res.getInt("id");
+    try(final var statement = connection.createStatement()) {
+      final var res = statement
+          .executeQuery(
+              """
+                  INSERT INTO simulation (simulation_template_id, plan_id, arguments)
+                  VALUES ('%s', '%s', '{}')
+                  RETURNING id;"""
+                  .formatted(simulationTemplateId, planId)
+          );
+      res.next();
+      return res.getInt("id");
+    }
   }
 
   void clearSimulations() throws SQLException {
-    connection.createStatement()
-              .executeUpdate(
-                  """
-                      TRUNCATE simulation CASCADE;"""
-              );
+    try(final var statement = connection.createStatement()) {
+      statement
+          .executeUpdate(
+              """
+                  TRUNCATE simulation CASCADE;"""
+          );
+    }
   }
 
   int fileId;
@@ -468,34 +491,41 @@ class DatabaseTests {
     @Test
     void shouldIncrementSimulationTemplateRevisionOnSimulationTemplateUpdate() throws SQLException {
 
-      final var initialRes = connection.createStatement()
-                                       .executeQuery(
-                                           """
-                                               SELECT revision FROM simulation_template
-                                               WHERE id = %s;"""
-                                               .formatted(simulationTemplateId)
-                                       );
-      initialRes.next();
-      final var initialRevision = initialRes.getInt("revision");
+      final int initialRevision;
+      try(final var statement = connection.createStatement()) {
+        final var initialRes = statement
+            .executeQuery(
+                """
+                    SELECT revision FROM simulation_template
+                    WHERE id = %s;"""
+                    .formatted(simulationTemplateId)
+            );
+        initialRes.next();
+        initialRevision = initialRes.getInt("revision");
+      }
 
-      connection.createStatement()
-                .executeUpdate(
-                    """
-                        UPDATE simulation_template SET description = 'test-description-updated'
-                        WHERE id = %s;"""
-                        .formatted(simulationTemplateId)
-                );
+      try(final var statement = connection.createStatement()) {
+        statement
+            .executeUpdate(
+                """
+                    UPDATE simulation_template SET description = 'test-description-updated'
+                    WHERE id = %s;"""
+                    .formatted(simulationTemplateId)
+            );
+      }
 
-      final var updatedRes = connection.createStatement()
-                                       .executeQuery(
-                                           """
-                                               SELECT revision FROM simulation_template
-                                               WHERE id = %s;"""
-                                               .formatted(simulationTemplateId)
-                                       );
-      updatedRes.next();
+      try(final var statement = connection.createStatement()) {
+        final var updatedRes = statement
+            .executeQuery(
+                """
+                    SELECT revision FROM simulation_template
+                    WHERE id = %s;"""
+                    .formatted(simulationTemplateId)
+            );
+        updatedRes.next();
 
-      assertEquals(initialRevision + 1, updatedRes.getInt("revision"));
+        assertEquals(initialRevision + 1, updatedRes.getInt("revision"));
+      }
     }
   }
 
@@ -503,35 +533,42 @@ class DatabaseTests {
   class SimulationTriggers {
     @Test
     void shouldIncrementSimulationRevisionOnSimulationUpdate() throws SQLException {
+      final int initialRevision;
+      try(final var statement = connection.createStatement()) {
+        final var initialRes = statement
+            .executeQuery(
+                """
+                    SELECT revision FROM simulation
+                    WHERE id = %s;"""
+                    .formatted(simulationId)
+            );
+        initialRes.next();
 
-      final var initialRes = connection.createStatement()
-                                       .executeQuery(
-                                           """
-                                               SELECT revision FROM simulation
-                                               WHERE id = %s;"""
-                                               .formatted(simulationId)
-                                       );
-      initialRes.next();
-      final var initialRevision = initialRes.getInt("revision");
+        initialRevision = initialRes.getInt("revision");
+      }
 
-      connection.createStatement()
-                .executeUpdate(
-                    """
-                        UPDATE simulation SET arguments = '{}'
-                        WHERE id = %s;"""
-                        .formatted(simulationId)
-                );
+      try(final var statement = connection.createStatement()) {
+        statement
+            .executeUpdate(
+                """
+                    UPDATE simulation SET arguments = '{}'
+                    WHERE id = %s;"""
+                    .formatted(simulationId)
+            );
+      }
 
-      final var updatedRes = connection.createStatement()
-                                       .executeQuery(
-                                           """
-                                               SELECT revision FROM simulation
-                                               WHERE id = %s;"""
-                                               .formatted(simulationId)
-                                       );
-      updatedRes.next();
+      try(final var statement = connection.createStatement()) {
+        final var updatedRes = statement
+            .executeQuery(
+                """
+                    SELECT revision FROM simulation
+                    WHERE id = %s;"""
+                    .formatted(simulationId)
+            );
+        updatedRes.next();
 
-      assertEquals(initialRevision + 1, updatedRes.getInt("revision"));
+        assertEquals(initialRevision + 1, updatedRes.getInt("revision"));
+      }
     }
   }
 }
