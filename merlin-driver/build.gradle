@@ -35,6 +35,7 @@ javadoc.options.links 'https://commons.apache.org/proper/commons-lang/javadocs/a
 javadoc.options.addStringOption('Xdoclint:none', '-quiet')
 
 dependencies {
+  implementation project(":merlin-driver-protocol")
   implementation project(':parsing-utilities')
 
   api project(':merlin-sdk')

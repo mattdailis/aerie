@@ -123,12 +123,12 @@ public class CombinedSimulationResults implements SimulationResultsInterface {
     var sNew = listNew.stream();
 
     // translate the segment extents into time elapsed.
-    var ssOld = sOld.map(p -> {
+    Stream<Triple<Duration, Integer, ProfileSegment<D>>> ssOld = sOld.map(p -> {
       var r =  Triple.of(elapsed[0], 1, p);  // This middle index distinguishes old vs new and orders new before old when at the same time.
       elapsed[0] = elapsed[0].plus(p.extent());
       return r;
     });
-    var ssNew = sNew.map(p -> {
+    Stream<Triple<Duration, Integer, ProfileSegment<D>>> ssNew = sNew.map(p -> {
       var r =  Triple.of(elapsed[1], 0, p);
       elapsed[1] = elapsed[1].plus(p.extent());
       final Triple<Duration, Integer, ProfileSegment<D>> r1 = r;
