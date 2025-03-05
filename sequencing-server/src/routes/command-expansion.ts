@@ -19,6 +19,8 @@ import type { SimulatedActivity } from '../lib/batchLoaders/simulatedActivityBat
 import { Mustache } from '../lib/mustache/util/index.js';
 import { seqnBuilder } from '../builders/seqnBuilder.js';
 import type { ExpandedActivity, SeqBuilder } from '../types/seqBuilder.js';
+import { applyActivityLayerFilter } from '../lib/filters/utilities.js';
+import { convertDoyToYmd } from '../lib/mustache/util/time.js';
 import { stringifyActivity } from '../lib/mustache/util/activity.js';
 import { stolBuilder } from '../builders/stolBuilder.js';
 import { concatBuilder } from "../builders/concatBuilder.js";
@@ -82,6 +84,76 @@ commandExpansionRouter.post('/put-expansion', async (req, res, next) => {
   res.status(200).json({ id, errors: result.isErr() ? result.unwrapErr() : [] });
   return next();
 });
+
+commandExpansionRouter.post('/assign-activities-by-filter', async (req, res, next) => {
+  /**
+   * ARGUMENTS
+   * {
+   *    filterId: Int!,
+   *    simulationDatasetId: Int!,
+   *    seqId: String!
+   *    timeRangeStart: String!,
+   *    timeRangeEnd: String!
+   * }
+   */
+
+  // 1. Grab filterId, simulationDatasetId, seqId (for later); load the filter and set of simulated activities
+  const context: Context = res.locals['context'];
+
+  const filterId = req.body.input.filterId as number;
+  const simulationDatasetId = req.body.input.simulationDatasetId as number;
+  const seqId = req.body.input.seqId as number;
+  const timeRangeStart = Temporal.Instant.from(convertDoyToYmd(req.body.input.timeRangeStart));
+  const timeRangeEnd = Temporal.Instant.from(convertDoyToYmd(req.body.input.timeRangeEnd));
+
+  // Verify that timeRangeStart < timeRangeEnd
+  if (timeRangeStart.epochMicroseconds > timeRangeEnd.epochMicroseconds) {
+    throw new Error(
+      `POST /command-expansion/assign-activities-by-filter: Provided start time (${timeRangeStart.toString()}) greater than end time (${timeRangeEnd.toString()}) for filtration.`,
+    );
+  }
+
+  const [simulatedActivities, sequenceFilter] = await Promise.all([
+    context.simulatedActivitiesDataLoader.load({ simulationDatasetId }),
+    context.sequenceFilterDataLoader.load({ filterId })
+  ]);
+
+  // 2. Evaluate the filter, creating a set of filtered, simulated activities
+  let filteredActivities: SimulatedActivity<Record<string, unknown>, Record<string, unknown>>[] = applyActivityLayerFilter(sequenceFilter.filter, simulatedActivities, timeRangeStart, timeRangeEnd);
+
+  // 3. Create new entries in sequencing.seqeunce_to_simulated_activity for just the filtered, simulated activities and the passed-in seqId
+  //    3a. Create query:
+  let query = `
+      insert into sequencing.sequence_to_simulated_activity (simulated_activity_id, simulation_dataset_id, seq_id)
+        values
+`
+  for (const entry of filteredActivities.entries()) {
+    if (entry[0] === filteredActivities.length - 1) {
+      query += `          (${entry[1].id}, ${simulationDatasetId}, '${seqId}')\n`
+    }
+    else {
+      query += `          (${entry[1].id}, ${simulationDatasetId}, '${seqId}'),\n`
+    }
+  }
+  query += `        returning simulated_activity_id;`
+
+  //    3b. Execute query:
+  const { rows } = await db.query(query);
+  if (rows.length < 1) {
+    throw new Error(
+      `POST /command-expansion/assign-activities-by-filter: Entries failed to be created for filtered activities.`,
+    );
+  }
+  logger.info(
+    `POST /command-expansion/expand-all-activity-instances: Inserted entries for filtered activities.`,
+  );
+
+  //    3c. Return
+  res.status(200).json({
+    success: true
+  });
+  return next();
+})
 
 commandExpansionRouter.post('/put-template', async (req, res, next) => {
   const name = req.body.input.name as string;
