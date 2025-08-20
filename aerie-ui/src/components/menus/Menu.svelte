@@ -1,0 +1,148 @@
+<svelte:options accessors={true} immutable={true} />
+
+<script lang="ts" context="module">
+  type MenuType = 'dropdown' | 'input';
+  type HideFns = {
+    dropdown: Set<() => void>;
+    input: Set<() => void>;
+  };
+  const hideFns: HideFns = {
+    dropdown: new Set<() => void>(),
+    input: new Set<() => void>(),
+  };
+
+  export function hideAllMenus(type?: MenuType) {
+    if (type) {
+      hideFns[type].forEach(hideFn => {
+        hideFn();
+      });
+    } else {
+      hideFns.dropdown.forEach(hideFn => {
+        hideFn();
+      });
+      hideFns.input.forEach(hideFn => {
+        hideFn();
+      });
+    }
+  }
+</script>
+
+<script lang="ts">
+  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
+  import { createPopperActions } from 'svelte-popperjs';
+  import type { Placement } from 'tippy.js';
+
+  export let hideAfterClick: boolean = true;
+  export let offset: number[] = [0, 1];
+  export let isMounted: boolean = false;
+  export let placement: Placement = 'bottom-start';
+  export let type: MenuType = 'dropdown';
+  export let width: number | null = null;
+
+  // The shown state is intentionally private.
+  // Use the accessor functions to change this state.
+  // This is so we can more easily control global state of all Menus on a page.
+  // See 'hideAllMenus' above.
+  let shown: boolean = false;
+
+  $: if (isMounted) {
+    if (shown) {
+      document.addEventListener('keydown', onDocumentKeydown);
+    } else {
+      document.removeEventListener('keydown', onDocumentKeydown);
+    }
+  }
+
+  export function hide(): void {
+    if (shown) {
+      dispatch('hide');
+    }
+    shown = false;
+  }
+
+  export function isShown(): boolean {
+    return shown;
+  }
+
+  export function show(): void {
+    hideAllMenus(type);
+    shown = true;
+    dispatch('show');
+  }
+
+  export function toggle(): void {
+    if (shown) {
+      hide();
+    } else {
+      show();
+    }
+  }
+
+  const dispatch = createEventDispatcher<{
+    hide: void;
+    show: void;
+  }>();
+
+  const [popperRef, popperContent] = createPopperActions({
+    placement,
+    strategy: 'fixed',
+  });
+  const extraOpts = {
+    modifiers: [
+      {
+        enabled: true,
+        name: 'flip',
+        options: {
+          fallbackPlacements: ['top-start'],
+        },
+      },
+      { name: 'offset', options: { offset } },
+    ],
+  };
+
+  onMount(() => {
+    hideFns[type].add(hide);
+    isMounted = true;
+  });
+
+  onDestroy(() => {
+    hideFns[type].delete(hide);
+  });
+
+  function onDocumentKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      hideAllMenus();
+    }
+  }
+
+  function onClick() {
+    if (hideAfterClick) {
+      hide();
+    }
+  }
+</script>
+
+<svelte:body on:click={hide} />
+
+{#if shown}
+  <!-- svelte-ignore a11y-click-events-have-key-events a11y-interactive-supports-focus -->
+  <div class="menu pointer-events-none" role="menu" use:popperRef on:click|stopPropagation={onClick}>
+    <div
+      class="st-menu st-typography-medium pointer-events-auto"
+      style:width={typeof width === 'number' ? `${width}px` : null}
+      use:popperContent={extraOpts}
+    >
+      <slot />
+    </div>
+  </div>
+{/if}
+
+<style>
+  .menu {
+    height: 100%;
+    left: 0;
+    position: absolute;
+    top: 4px;
+    width: 100%;
+  }
+</style>

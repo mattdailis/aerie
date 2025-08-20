@@ -1,0 +1,17 @@
+.DS_Store
+aerie/
+build
+e2e-test-results
+.idea/
+node_modules
+/package
+/static/version.json
+/static/resources/*
+/.svelte-kit
+test-results
+unit-test-results
+*.local
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

@@ -1,0 +1,144 @@
+<script lang="ts">
+  import CloseIcon from '@nasa-jpl/stellar/icons/close.svg?component';
+  import { mode } from 'mode-watcher';
+  import { createEventDispatcher } from 'svelte';
+  import { isValidHex, pickTextColorBasedOnBgColor, shadeColor } from '../../utilities/color';
+  import { classNames } from '../../utilities/generic';
+
+  export let color: string | null | undefined = '#f8f8f8';
+  export let disabled: boolean = false;
+  export let label: string = '';
+  export let className: string = '';
+  export let removable: boolean = true;
+  export let ariaRole: string = 'button';
+
+  let chipStyle: string = '';
+  let removeStyle: string = '';
+
+  const dispatch = createEventDispatcher<{
+    click: void;
+  }>();
+
+  $: rootClasses = classNames('st-chip st-typography-body', {
+    'chip-removable': removable,
+    'chip-with-label': !!label,
+    [className]: !!className,
+  });
+
+  $: {
+    let finalColor = typeof color === 'string' && isValidHex(color) ? color : '#f8f8f8';
+    const lightOrDark = pickTextColorBasedOnBgColor(finalColor);
+    let textColor = '';
+    let removeColor = '';
+    let removeBgColor = '';
+
+    if (lightOrDark === 'dark') {
+      textColor = shadeColor(finalColor, 5);
+      removeColor = shadeColor(finalColor || '', 5.5);
+      removeBgColor = shadeColor(finalColor, 1.1);
+    } else {
+      textColor = 'rgb(255,255,255)';
+      removeColor = 'rgba(255,255,255, 0.9)';
+      removeBgColor = shadeColor(finalColor, 0.7);
+    }
+    if ($mode === 'dark') {
+      chipStyle = `
+        background: ${finalColor}22;
+        border: 1px solid ${lightOrDark === 'light' ? 'rgba(255,255,255,0.2)' : `${finalColor}40`};
+        color: ${lightOrDark === 'light' ? 'rgba(255,255,255,0.9)' : `${finalColor}f0`};
+      `;
+    } else {
+      chipStyle = `
+        background: ${finalColor};
+        color: ${textColor};
+      `;
+    }
+
+    removeStyle = `background:${removeBgColor};color:${removeColor}`;
+  }
+</script>
+
+<button
+  type="button"
+  {disabled}
+  style={chipStyle}
+  class={rootClasses}
+  role={ariaRole}
+  tabindex={removable ? 0 : -1}
+  on:click|preventDefault={() => {
+    if (removable) {
+      dispatch('click');
+    }
+  }}
+>
+  <slot />
+  <div class="chip-label">{label}</div>
+  {#if removable}
+    <div style={removeStyle} class="chip-remove-button">
+      <CloseIcon />
+    </div>
+  {/if}
+</button>
+
+<style>
+  .st-chip {
+    align-items: center;
+    background-color: var(--st-gray-10);
+    border: none;
+    border: 1px solid rgba(0, 0, 0, 0.24);
+    border-radius: 48px;
+    color: var(--st-gray-90);
+    cursor: pointer;
+    display: inline-grid;
+    flex-shrink: 0;
+    grid-template-columns: min-content;
+    height: 24px;
+    line-height: 24px;
+    max-width: 100%;
+    overflow: hidden;
+    padding: 8px;
+    position: relative;
+    text-align: left;
+    white-space: nowrap;
+    width: min-content;
+  }
+
+  .st-chip:disabled {
+    cursor: not-allowed;
+  }
+
+  .st-chip.chip-removable:hover {
+    background-color: var(--st-gray-20);
+  }
+
+  .st-chip.chip-removable:hover .chip-label {
+    width: calc(100% - 20px);
+  }
+
+  .st-chip:hover .chip-remove-button {
+    display: flex;
+  }
+
+  .chip-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chip-remove-button {
+    align-items: center;
+    background-color: var(--st-gray-30);
+    color: var(--st-gray-100);
+    display: none;
+    height: 24px;
+    justify-content: center;
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 24px;
+  }
+
+  /* Add dark mode styles using CSS variables */
+  :global(.dark) .st-chip {
+    background-color: color-mix(in srgb, var(--background) 80%, transparent);
+  }
+</style>

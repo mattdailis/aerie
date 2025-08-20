@@ -1,0 +1,530 @@
+<svelte:options immutable={true} />
+
+<script lang="ts">
+  import { goto } from '$app/navigation';
+  import { base } from '$app/paths';
+  import RefreshIcon from '@nasa-jpl/stellar/icons/refresh.svg?component';
+  import type { ICellRendererParams, ValueGetterParams } from 'ag-grid-community';
+  import BarChartIcon from 'bootstrap-icons/icons/bar-chart.svg?component';
+  import XIcon from 'bootstrap-icons/icons/x.svg?component';
+  import { onDestroy } from 'svelte';
+  import PageTitle from '../../components/app/PageTitle.svelte';
+  import CssGrid from '../../components/ui/CssGrid.svelte';
+  import DataGridActions from '../../components/ui/DataGrid/DataGridActions.svelte';
+  import SingleActionDataGrid from '../../components/ui/DataGrid/SingleActionDataGrid.svelte';
+  import Panel from '../../components/ui/Panel.svelte';
+  import SectionTitle from '../../components/ui/SectionTitle.svelte';
+  import { createModelError, creatingModel, models, resetModelStores } from '../../stores/model';
+  import type { User } from '../../types/app';
+  import type { DataGridColumnDef, RowId } from '../../types/data-grid';
+  import type { ModelSlim } from '../../types/model';
+  import effects from '../../utilities/effects';
+  import { getModelStatusRollup } from '../../utilities/model';
+  import { permissionHandler } from '../../utilities/permissionHandler';
+  import { featurePermissions } from '../../utilities/permissions';
+  import { getShortISOForDate } from '../../utilities/time';
+  import { tooltip } from '../../utilities/tooltip';
+  import Input from '../form/Input.svelte';
+  import AlertError from '../ui/AlertError.svelte';
+  import ModelId from './ModelId.svelte';
+  import ModelStatusRollup from './ModelStatusRollup.svelte';
+
+  export let user: User | null;
+  export let initialModels: ModelSlim[] = [];
+
+  type CellRendererParams = {
+    deleteModel: (model: ModelSlim) => void;
+    editModel: (model: ModelSlim) => void;
+  };
+  type ModelCellRendererParams = ICellRendererParams<ModelSlim> & CellRendererParams;
+  type ModelIdCellRendererParams = ICellRendererParams<ModelSlim>;
+
+  const createModelPermissionError: string = 'You do not have permission to upload a model';
+  const updateModelPermissionError: string = 'You do not have permission to update this model';
+  const createPlanPermissionError: string = 'You do not have permission to create a plan';
+  const extractionPermissionError: string = 'You do not have permission to re-trigger a model extraction';
+
+  const baseColumnDefs: DataGridColumnDef[] = [
+    { field: 'name', filter: 'text', headerName: 'Name', resizable: true, sortable: true },
+    { field: 'owner', filter: 'text', headerName: 'Owner', resizable: true, sortable: true },
+    {
+      field: 'created_at',
+      filter: 'text',
+      headerName: 'Date Created',
+      resizable: true,
+      sortable: true,
+      valueGetter: (params: ValueGetterParams<ModelSlim>) => {
+        if (params.data?.created_at) {
+          return new Date(params.data?.created_at).toISOString().slice(0, 19);
+        }
+      },
+    },
+    { field: 'description', filter: 'text', headerName: 'Description', resizable: true, sortable: true },
+    { field: 'version', filter: 'number', headerName: 'Version', sortable: true, width: 120 },
+  ];
+
+  let columnDefs: DataGridColumnDef[] = baseColumnDefs;
+  let createButtonDisabled: boolean = false;
+  let description = '';
+  let files: FileList | undefined;
+  let hasCreateModelPermission: boolean = false;
+  let hasCreatePlanPermission: boolean = false;
+  let hasDeleteModelPermission: boolean = false;
+  let hasUpdateModelPermission: boolean = false;
+  let hasExtractionPermission: boolean = false;
+  let modelHasExtractionError: boolean = false;
+  let name = '';
+  let selectedModel: ModelSlim | null = null;
+  let selectedModelId: number | null = null;
+  let version = '';
+
+  $: models.updateValue(() => initialModels);
+  $: createButtonDisabled = !files || name === '' || version === '' || $creatingModel === true;
+  $: {
+    hasCreateModelPermission = featurePermissions.model.canCreate(user);
+    hasCreatePlanPermission = featurePermissions.plan.canCreate(user);
+    hasDeleteModelPermission = featurePermissions.model.canDelete(user);
+    hasUpdateModelPermission = featurePermissions.model.canUpdate(user);
+    hasExtractionPermission = featurePermissions.model.canUpdate(user);
+    columnDefs = [
+      {
+        cellClass: 'action-cell-container',
+        cellRenderer: (params: ModelIdCellRendererParams) => {
+          const modelIdDiv = document.createElement('div');
+          modelIdDiv.className = 'model-id-cell';
+          new ModelId({
+            props: {
+              model: params.data,
+            },
+            target: modelIdDiv,
+          });
+
+          return modelIdDiv;
+        },
+        field: 'id',
+        filter: 'number',
+        headerName: 'ID',
+        resizable: true,
+        sortable: true,
+        suppressAutoSize: true,
+        suppressSizeToFit: true,
+        width: 75,
+      },
+      ...baseColumnDefs,
+      {
+        cellClass: 'action-cell-container',
+        cellRenderer: (params: ModelCellRendererParams) => {
+          const actionsDiv = document.createElement('div');
+          actionsDiv.className = 'actions-cell';
+          new DataGridActions({
+            props: {
+              deleteCallback: params.deleteModel,
+              deleteTooltip: {
+                content: 'Delete Model',
+                placement: 'bottom',
+              },
+              editCallback: params.editModel,
+              editTooltip: {
+                content: 'Edit Model',
+                placement: 'bottom',
+              },
+              hasDeletePermission: hasDeleteModelPermission,
+              hasEditPermission: hasUpdateModelPermission,
+              rowData: params.data,
+            },
+            target: actionsDiv,
+          });
+
+          return actionsDiv;
+        },
+        cellRendererParams: {
+          deleteModel,
+          editModel,
+        } as CellRendererParams,
+        field: 'actions',
+        headerName: '',
+        resizable: false,
+        sortable: false,
+        suppressAutoSize: true,
+        suppressSizeToFit: true,
+        width: 55,
+      },
+    ];
+  }
+  $: selectedModel = $models.find(({ id }) => id === selectedModelId) ?? null;
+  $: selectedModelDefaultViewName = selectedModel?.view
+    ? `${selectedModel.view.name} (ID: ${selectedModel.view.id})`
+    : 'None';
+  $: if (selectedModel) {
+    const { activityLogStatus, parameterLogStatus, resourceLogStatus } = getModelStatusRollup(selectedModel);
+
+    if (activityLogStatus === 'error' || parameterLogStatus === 'error' || resourceLogStatus === 'error') {
+      modelHasExtractionError = true;
+    } else {
+      modelHasExtractionError = false;
+    }
+  } else {
+    modelHasExtractionError = false;
+  }
+
+  onDestroy(() => {
+    resetModelStores();
+  });
+
+  function createPlanWithModel() {
+    if (selectedModel) {
+      goto(`${base}/plans?modelId=${selectedModel.id}`);
+    }
+  }
+
+  function editModel(model: ModelSlim) {
+    goto(`${base}/models/${model.id}`);
+  }
+
+  function deleteModel(model: ModelSlim) {
+    effects.deleteModel(model, user);
+  }
+
+  function deleteModelContext(event: CustomEvent<RowId[]>) {
+    const selectedModelId = event.detail[0] as number;
+    const modelToDelete = $models.find((model: ModelSlim) => model.id === selectedModelId);
+    if (modelToDelete) {
+      deleteModel(modelToDelete);
+    }
+  }
+
+  function editModelContext(event: CustomEvent<RowId[]>) {
+    const selectedModelId = event.detail[0] as number;
+    const modelToDelete = $models.find((model: ModelSlim) => model.id === selectedModelId);
+    if (modelToDelete) {
+      editModel(modelToDelete);
+    }
+  }
+
+  function deselectModel() {
+    selectModel(null);
+  }
+
+  function onEditModel() {
+    if (selectedModel) {
+      editModel(selectedModel);
+    }
+  }
+
+  function onRetriggerModelExtraction() {
+    if (selectedModel != null) {
+      const prevLogs = {
+        refresh_activity_type_logs: selectedModel.refresh_activity_type_logs,
+        refresh_model_parameter_logs: selectedModel.refresh_model_parameter_logs,
+        refresh_resource_type_logs: selectedModel.refresh_resource_type_logs,
+      };
+      selectedModel = {
+        ...selectedModel,
+        refresh_activity_type_logs: [{ error: null, error_message: null, pending: true, success: false }],
+        refresh_model_parameter_logs: [{ error: null, error_message: null, pending: true, success: false }],
+        refresh_resource_type_logs: [{ error: null, error_message: null, pending: true, success: false }],
+      };
+
+      // introduce delay to allow users to see a transition in case retriggering is instantaneous
+      setTimeout(async () => {
+        if (selectedModel) {
+          const extractionResponse = await effects.retriggerModelExtraction(selectedModel.id, user);
+
+          if (extractionResponse == null) {
+            selectedModel = {
+              ...selectedModel,
+              ...prevLogs,
+            };
+          }
+        }
+      }, 200);
+    }
+  }
+
+  function selectModel(modelId: number | null) {
+    selectedModelId = modelId;
+  }
+
+  async function submitForm(e: SubmitEvent) {
+    if (files) {
+      const newModelId = await effects.createModel(name, version, files, user, description);
+      if ($createModelError === null && e.target instanceof HTMLFormElement) {
+        goto(`${base}/models/${newModelId}`);
+      }
+    }
+  }
+</script>
+
+<PageTitle title="Models" />
+
+<CssGrid columns="20% auto">
+  <Panel borderRight padBody={false}>
+    <svelte:fragment slot="header">
+      <SectionTitle>{selectedModel ? selectedModel.name : 'New Model'}</SectionTitle>
+      {#if selectedModel}
+        <button
+          class="st-button icon fs-6"
+          on:click={deselectModel}
+          use:tooltip={{ content: 'Deselect model', placement: 'top' }}
+        >
+          <XIcon />
+        </button>
+      {/if}
+    </svelte:fragment>
+    <svelte:fragment slot="body">
+      {#if selectedModel}
+        <div class="model-metadata">
+          <fieldset>
+            <Input layout="inline">
+              <label class="" for="name">Model Name</label>
+              <input
+                disabled
+                class="st-input w-full"
+                name="name"
+                use:tooltip={{ content: name, placement: 'top' }}
+                value={selectedModel.name}
+                id="name"
+              />
+            </Input>
+            <Input layout="inline">
+              <label class="model-metadata-item-label" for="id">Model ID</label>
+              <input disabled class="st-input w-full" name="id" value={selectedModel.id} />
+            </Input>
+            <Input layout="inline">
+              <label class="model-metadata-item-label" for="description">Model Description</label>
+              <textarea
+                disabled
+                class="st-input w-full"
+                name="description"
+                id="description"
+                value={selectedModel.description}
+              />
+            </Input>
+            <Input layout="inline">
+              <label class="model-metadata-item-label" for="version">Model Version</label>
+              <input disabled class="st-input w-full" name="version" id="version" value={selectedModel.version} />
+            </Input>
+            <Input layout="inline">
+              <label class="model-metadata-item-label" for="owner">Owner</label>
+              <input disabled class="st-input w-full" name="owner" value={selectedModel.owner} id="owner" />
+            </Input>
+            <Input layout="inline">
+              <label class="model-metadata-item-label" for="defaultView">Default View</label>
+              <input
+                disabled
+                class="st-input w-full"
+                name="defaultView"
+                value={selectedModelDefaultViewName}
+                id="defaultView"
+              />
+            </Input>
+            <Input layout="inline">
+              <label class="model-metadata-item-label" for="created">Date Created</label>
+              <input
+                disabled
+                class="st-input w-full"
+                name="created"
+                id="created"
+                value={getShortISOForDate(new Date(selectedModel.created_at))}
+              />
+            </Input>
+            <Input layout="inline">
+              <div class="model-jar-label">
+                <label class="model-metadata-item-label" for="status">Jar File Status</label>
+                {#if modelHasExtractionError}
+                  <button
+                    class="icon-button"
+                    on:click={onRetriggerModelExtraction}
+                    use:permissionHandler={{
+                      hasPermission: hasExtractionPermission,
+                      permissionError: extractionPermissionError,
+                    }}
+                    use:tooltip={{
+                      content: 'Re-run extraction',
+                      disabled: !hasExtractionPermission,
+                    }}
+                  >
+                    <RefreshIcon />
+                  </button>
+                {/if}
+              </div>
+              <ModelStatusRollup mode="rollup" model={selectedModel} />
+            </Input>
+            <div class="model-status-full">
+              <ModelStatusRollup mode="full" model={selectedModel} />
+            </div>
+          </fieldset>
+        </div>
+        <div class="model-buttons">
+          <button
+            class="st-button secondary w-full"
+            on:click={createPlanWithModel}
+            use:permissionHandler={{
+              hasPermission: hasCreatePlanPermission,
+              permissionError: createPlanPermissionError,
+            }}
+          >
+            New plan with model
+          </button>
+          <button
+            class="st-button w-full"
+            on:click={onEditModel}
+            use:permissionHandler={{
+              hasPermission: hasUpdateModelPermission,
+              permissionError: updateModelPermissionError,
+            }}
+          >
+            Edit details and associations
+          </button>
+        </div>
+      {:else}
+        <form on:submit|preventDefault={submitForm}>
+          <AlertError class="m-2" error={$createModelError} />
+
+          <fieldset>
+            <label for="name">Name</label>
+            <input
+              bind:value={name}
+              autocomplete="off"
+              class="st-input w-full"
+              name="name"
+              id="name"
+              required
+              use:permissionHandler={{
+                hasPermission: hasCreateModelPermission,
+                permissionError: createModelPermissionError,
+              }}
+            />
+          </fieldset>
+
+          <fieldset>
+            <label for="version">Version</label>
+            <input
+              bind:value={version}
+              autocomplete="off"
+              class="st-input w-full"
+              name="version"
+              placeholder="0.0.0"
+              id="version"
+              required
+              use:permissionHandler={{
+                hasPermission: hasCreateModelPermission,
+                permissionError: createModelPermissionError,
+              }}
+            />
+          </fieldset>
+
+          <fieldset>
+            <label for="description">Description</label>
+            <textarea
+              bind:value={description}
+              autocomplete="off"
+              class="st-input w-full"
+              name="description"
+              id="description"
+              placeholder="Enter Model Description (optional)"
+            />
+          </fieldset>
+
+          <fieldset>
+            <label for="file">Jar File</label>
+            <input
+              class="w-full"
+              id="file"
+              name="file"
+              required
+              type="file"
+              bind:files
+              use:permissionHandler={{
+                hasPermission: hasCreateModelPermission,
+                permissionError: createModelPermissionError,
+              }}
+            />
+          </fieldset>
+
+          <fieldset>
+            <button
+              class="st-button w-full"
+              disabled={createButtonDisabled}
+              type="submit"
+              use:permissionHandler={{
+                hasPermission: hasCreateModelPermission,
+                permissionError: createModelPermissionError,
+              }}
+            >
+              {$creatingModel ? 'Creating...' : 'Create'}
+            </button>
+          </fieldset>
+        </form>
+      {/if}
+    </svelte:fragment>
+  </Panel>
+
+  <Panel>
+    <svelte:fragment slot="header">
+      <SectionTitle>
+        <BarChartIcon slot="icon" />
+        Models
+      </SectionTitle>
+    </svelte:fragment>
+
+    <svelte:fragment slot="body">
+      <SingleActionDataGrid
+        {columnDefs}
+        columnsToForceRefreshOnDataUpdate={['id']}
+        hasEdit={hasUpdateModelPermission}
+        hasEditPermission={hasUpdateModelPermission}
+        hasDeletePermission={hasDeleteModelPermission}
+        itemDisplayText="Model"
+        items={$models}
+        showLoadingSkeleton
+        loading={$models === null}
+        {user}
+        selectedItemId={selectedModel?.id ?? null}
+        on:deleteItem={deleteModelContext}
+        on:editItem={editModelContext}
+        on:rowClicked={({ detail }) => selectModel(detail.data.id)}
+      />
+    </svelte:fragment>
+  </Panel>
+</CssGrid>
+
+<style>
+  .model-metadata input:disabled,
+  .model-metadata textarea:disabled {
+    opacity: 1;
+  }
+
+  .model-metadata-item-label {
+    white-space: nowrap;
+  }
+
+  .model-buttons {
+    display: flex;
+    flex-flow: column;
+    padding: 8px;
+    row-gap: 8px;
+  }
+
+  .model-status-full {
+    margin: 8px 0;
+  }
+
+  .model-jar-label {
+    display: grid;
+    grid-template-columns: auto min-content;
+  }
+
+  button.icon-button {
+    align-items: center;
+    background: none;
+    border: none;
+    color: var(--st-primary-70);
+    cursor: pointer;
+    display: flex;
+  }
+
+  button.icon-button:hover {
+    color: var(--st-primary-100);
+  }
+</style>

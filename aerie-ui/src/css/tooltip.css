@@ -1,0 +1,138 @@
+.sequence-tooltip {
+  max-width: 50rem;
+}
+
+.tooltip {
+  background-color: rgba(0, 0, 0, 0.8);
+  border-radius: 4px;
+  /*
+    TODO save as a variable, used for both menu and this tooltip
+    though all popover/menus/tooltips could really use a consistency pass
+  */
+  box-shadow:
+    0 2px 4px -1px #0003,
+    0 4px 5px #00000024,
+    0 1px 10px #0000001f;
+  display: block;
+  opacity: 0;
+  padding: 8px;
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+}
+
+.tooltip hr {
+  background-color: rgba(255, 255, 255, 0.3);
+  border: 0;
+  height: 1px;
+  margin: 8px 0px;
+}
+
+.tooltip-row-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tooltip-row {
+  display: grid;
+  font-feature-settings: 'tnum';
+  gap: 8px;
+  grid-template-columns: 112px auto;
+}
+
+.tooltip-value-row {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+}
+
+.tooltip-color-box {
+  border: 1px solid var(--st-gray-50);
+  border-radius: 2px;
+  height: 15px;
+  width: 15px;
+}
+
+.tooltip-row .tooltip-value-highlight {
+  background: var(--st-gray-70);
+  border-radius: 2px;
+  color: var(--st-white);
+  display: flex;
+  padding: 0px 2px;
+  white-space: nowrap;
+  width: min-content;
+}
+
+.tooltip,
+.tippy-content {
+  color: var(--st-white);
+  font-family: var(--st-typography-body-font-family);
+  font-size: var(--st-typography-body-font-size);
+  font-weight: var(--st-typography-body-font-weight);
+  letter-spacing: var(--st-typography-body-letter-spacing);
+  line-height: var(--st-typography-body-line-height);
+}
+
+.tippy-content {
+  white-space: pre-line;
+}
+
+.tooltip-shortcut {
+  background-color: var(--st-gray-70);
+  border-radius: 3px;
+  display: flex;
+  justify-content: center;
+  min-width: 16px;
+  padding: 0 2px;
+}
+
+.tooltip--with-shortcut {
+  align-items: center;
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+}
+
+.tooltip-shortcut-container {
+  color: var(--st-gray-30);
+  display: flex;
+  gap: 4px;
+}
+
+.tippy-box[data-theme~='error'] {
+  background-color: #f8d7da;
+  box-shadow:
+    0 0 20px 4px rgba(154, 161, 177, 0.15),
+    0 4px 80px -8px rgba(36, 40, 47, 0.25),
+    0 4px 4px -2px rgba(91, 94, 105, 0.15);
+  color: var(--st-red);
+}
+
+.tippy-box[data-theme~='error'] > .tippy-content {
+  color: #721c24;
+}
+
+.tippy-box[data-theme~='error'][data-placement^='top'] > .tippy-arrow:before {
+  border-top-color: #f8d7da;
+}
+
+.tippy-box[data-theme~='error'][data-placement^='bottom'] > .tippy-arrow:before {
+  border-bottom-color: #f8d7da;
+}
+
+.tippy-box[data-theme~='error'][data-placement^='left'] > .tippy-arrow:before {
+  border-left-color: #f8d7da;
+}
+
+.tippy-box[data-theme~='error'][data-placement^='right'] > .tippy-arrow:before {
+  border-right-color: #f8d7da;
+}
+
+.tippy-box[data-theme~='error'] > .tippy-backdrop {
+  background-color: #f8d7da;
+}
+
+.tippy-box[data-theme~='error'] > .tippy-svg-arrow {
+  fill: #f8d7da;
+}
